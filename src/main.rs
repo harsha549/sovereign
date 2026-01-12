@@ -3,6 +3,7 @@ mod storage;
 mod agents;
 mod embeddings;
 mod sync;
+mod rag;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
