@@ -1,10 +1,13 @@
 use anyhow::Result;
+use futures::stream::StreamExt;
+use futures::SinkExt;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::thread;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, oneshot};
+use tokio_tungstenite::tungstenite::Message;
 
 #[cfg(unix)]
 use tokio::net::{UnixListener, UnixStream};
@@ -13,6 +16,7 @@ use crate::agents::Orchestrator;
 use crate::watcher::FileWatcher;
 
 const DEFAULT_PORT: u16 = 7655;
+const DEFAULT_WS_PORT: u16 = 7656;
 const SOCKET_NAME: &str = "sovereign.sock";
 
 /// Message sent to the orchestrator thread
@@ -39,6 +43,22 @@ pub struct DaemonResponse {
     pub success: bool,
     pub result: Option<String>,
     pub error: Option<String>,
+}
+
+/// WebSocket request message
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WsRequest {
+    pub id: String,
+    pub command: String,
+    pub args: Option<String>,
+}
+
+/// WebSocket response message
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WsResponse {
+    pub id: String,
+    pub event: String, // "chunk", "complete", "error"
+    pub data: Option<String>,
 }
 
 impl Daemon {
@@ -135,6 +155,32 @@ impl Daemon {
                 }
                 Err(e) => {
                     eprintln!("Accept error: {}", e);
+                }
+            }
+        }
+    }
+
+    /// Start the daemon with WebSocket support for real-time streaming
+    pub async fn start_websocket(&self, port: Option<u16>) -> Result<()> {
+        let port = port.unwrap_or(DEFAULT_WS_PORT);
+        let addr = format!("127.0.0.1:{}", port);
+
+        let listener = TcpListener::bind(&addr).await?;
+        println!("Sovereign WebSocket server listening on ws://{}", addr);
+
+        loop {
+            match listener.accept().await {
+                Ok((stream, peer)) => {
+                    println!("WebSocket connection from {}", peer);
+                    let request_tx = self.request_tx.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = handle_websocket_connection(stream, request_tx).await {
+                            eprintln!("WebSocket error: {}", e);
+                        }
+                    });
+                }
+                Err(e) => {
+                    eprintln!("WebSocket accept error: {}", e);
                 }
             }
         }
@@ -341,4 +387,116 @@ impl DaemonClient {
         };
         self.send(request).await.is_ok()
     }
+}
+
+/// Handle a WebSocket connection
+async fn handle_websocket_connection(
+    stream: TcpStream,
+    request_tx: mpsc::Sender<OrchestratorMessage>,
+) -> Result<()> {
+    let ws_stream = tokio_tungstenite::accept_async(stream).await?;
+    let (mut write, mut read) = ws_stream.split();
+
+    while let Some(msg) = read.next().await {
+        match msg {
+            Ok(Message::Text(text)) => {
+                let ws_request: WsRequest = match serde_json::from_str(&text) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        let error_response = WsResponse {
+                            id: "unknown".to_string(),
+                            event: "error".to_string(),
+                            data: Some(format!("Invalid request: {}", e)),
+                        };
+                        let json = serde_json::to_string(&error_response)?;
+                        write.send(Message::Text(json)).await?;
+                        continue;
+                    }
+                };
+
+                let input = if let Some(args) = &ws_request.args {
+                    format!("{} {}", ws_request.command, args)
+                } else {
+                    ws_request.command.clone()
+                };
+
+                // Send request through channel and wait for response
+                let (response_tx, response_rx) = oneshot::channel();
+                let msg = OrchestratorMessage {
+                    input,
+                    response_tx,
+                };
+
+                if request_tx.send(msg).await.is_err() {
+                    let error_response = WsResponse {
+                        id: ws_request.id.clone(),
+                        event: "error".to_string(),
+                        data: Some("Orchestrator thread terminated".to_string()),
+                    };
+                    let json = serde_json::to_string(&error_response)?;
+                    write.send(Message::Text(json)).await?;
+                    continue;
+                }
+
+                match response_rx.await {
+                    Ok(Ok(result)) => {
+                        // Send result in chunks for streaming effect
+                        let chunk_size = 100;
+                        let chunks: Vec<&str> = result
+                            .as_bytes()
+                            .chunks(chunk_size)
+                            .map(|c| std::str::from_utf8(c).unwrap_or(""))
+                            .collect();
+
+                        for chunk in chunks {
+                            let chunk_response = WsResponse {
+                                id: ws_request.id.clone(),
+                                event: "chunk".to_string(),
+                                data: Some(chunk.to_string()),
+                            };
+                            let json = serde_json::to_string(&chunk_response)?;
+                            write.send(Message::Text(json)).await?;
+                        }
+
+                        let complete_response = WsResponse {
+                            id: ws_request.id.clone(),
+                            event: "complete".to_string(),
+                            data: None,
+                        };
+                        let json = serde_json::to_string(&complete_response)?;
+                        write.send(Message::Text(json)).await?;
+                    }
+                    Ok(Err(e)) => {
+                        let error_response = WsResponse {
+                            id: ws_request.id.clone(),
+                            event: "error".to_string(),
+                            data: Some(e),
+                        };
+                        let json = serde_json::to_string(&error_response)?;
+                        write.send(Message::Text(json)).await?;
+                    }
+                    Err(_) => {
+                        let error_response = WsResponse {
+                            id: ws_request.id.clone(),
+                            event: "error".to_string(),
+                            data: Some("Response channel closed".to_string()),
+                        };
+                        let json = serde_json::to_string(&error_response)?;
+                        write.send(Message::Text(json)).await?;
+                    }
+                }
+            }
+            Ok(Message::Close(_)) => break,
+            Ok(Message::Ping(data)) => {
+                write.send(Message::Pong(data)).await?;
+            }
+            Err(e) => {
+                eprintln!("WebSocket message error: {}", e);
+                break;
+            }
+            _ => {}
+        }
+    }
+
+    Ok(())
 }

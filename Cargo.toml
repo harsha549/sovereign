@@ -66,5 +66,8 @@ notify = "6.1"
 # MD5 for quick hashing
 md5 = "0.7"
 
+# WebSocket support
+tokio-tungstenite = "0.21"
+
 [dev-dependencies]
 tempfile = "3"
