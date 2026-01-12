@@ -69,5 +69,8 @@ md5 = "0.7"
 # WebSocket support
 tokio-tungstenite = "0.21"
 
+# Async stream generation
+async-stream = "0.3"
+
 [dev-dependencies]
 tempfile = "3"
