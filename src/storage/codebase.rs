@@ -13,10 +13,13 @@ pub struct IndexedFile {
     pub relative_path: String,
     pub language: String,
     pub size: u64,
+    pub lines: usize,
     pub hash: String,
     pub summary: Option<String>,
     pub symbols: Vec<String>,
     pub indexed_at: DateTime<Utc>,
+    #[serde(skip)]
+    pub embedding: Option<Vec<f32>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -188,16 +191,19 @@ impl CodebaseIndex {
 
         let symbols = Self::extract_symbols(&content, language);
         let size = content.len() as u64;
+        let lines = content.lines().count();
 
         let indexed = IndexedFile {
             path: path.to_string_lossy().to_string(),
             relative_path,
             language: language.to_string(),
             size,
+            lines,
             hash,
             summary: None,
             symbols,
             indexed_at: Utc::now(),
+            embedding: None,
         };
 
         let symbols_json = serde_json::to_string(&indexed.symbols)?;
@@ -410,7 +416,7 @@ impl CodebaseIndex {
 
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<IndexedFile>> {
         let mut stmt = self.conn.prepare(
-            "SELECT f.path, f.relative_path, f.language, f.size, f.hash, f.summary, f.symbols, f.indexed_at
+            "SELECT f.path, f.relative_path, f.language, f.size, f.hash, f.summary, f.symbols, f.indexed_at, f.content
              FROM files f
              JOIN files_fts fts ON f.path = fts.path
              WHERE files_fts MATCH ?1
@@ -425,16 +431,20 @@ impl CodebaseIndex {
                 let indexed_at = DateTime::parse_from_rfc3339(&indexed_str)
                     .map(|dt| dt.with_timezone(&Utc))
                     .unwrap_or_else(|_| Utc::now());
+                let content: Option<String> = row.get(8).ok();
+                let lines = content.map(|c| c.lines().count()).unwrap_or(0);
 
                 Ok(IndexedFile {
                     path: row.get(0)?,
                     relative_path: row.get(1)?,
                     language: row.get(2)?,
                     size: row.get(3)?,
+                    lines,
                     hash: row.get(4)?,
                     summary: row.get(5)?,
                     symbols,
                     indexed_at,
+                    embedding: None,
                 })
             })?
             .filter_map(|r| r.ok())
@@ -446,7 +456,7 @@ impl CodebaseIndex {
     pub fn search_by_symbol(&self, symbol: &str, limit: usize) -> Result<Vec<IndexedFile>> {
         let pattern = format!("%{}%", symbol);
         let mut stmt = self.conn.prepare(
-            "SELECT path, relative_path, language, size, hash, summary, symbols, indexed_at
+            "SELECT path, relative_path, language, size, hash, summary, symbols, indexed_at, content
              FROM files
              WHERE symbols LIKE ?1
              LIMIT ?2",
@@ -460,16 +470,20 @@ impl CodebaseIndex {
                 let indexed_at = DateTime::parse_from_rfc3339(&indexed_str)
                     .map(|dt| dt.with_timezone(&Utc))
                     .unwrap_or_else(|_| Utc::now());
+                let content: Option<String> = row.get(8).ok();
+                let lines = content.map(|c| c.lines().count()).unwrap_or(0);
 
                 Ok(IndexedFile {
                     path: row.get(0)?,
                     relative_path: row.get(1)?,
                     language: row.get(2)?,
                     size: row.get(3)?,
+                    lines,
                     hash: row.get(4)?,
                     summary: row.get(5)?,
                     symbols,
                     indexed_at,
+                    embedding: None,
                 })
             })?
             .filter_map(|r| r.ok())
@@ -480,7 +494,7 @@ impl CodebaseIndex {
 
     pub fn get_file(&self, path: &str) -> Result<Option<IndexedFile>> {
         let result = self.conn.query_row(
-            "SELECT path, relative_path, language, size, hash, summary, symbols, indexed_at
+            "SELECT path, relative_path, language, size, hash, summary, symbols, indexed_at, content
              FROM files WHERE path = ?1 OR relative_path = ?1",
             params![path],
             |row| {
@@ -490,16 +504,20 @@ impl CodebaseIndex {
                 let indexed_at = DateTime::parse_from_rfc3339(&indexed_str)
                     .map(|dt| dt.with_timezone(&Utc))
                     .unwrap_or_else(|_| Utc::now());
+                let content: Option<String> = row.get(8).ok();
+                let lines = content.map(|c| c.lines().count()).unwrap_or(0);
 
                 Ok(IndexedFile {
                     path: row.get(0)?,
                     relative_path: row.get(1)?,
                     language: row.get(2)?,
                     size: row.get(3)?,
+                    lines,
                     hash: row.get(4)?,
                     summary: row.get(5)?,
                     symbols,
                     indexed_at,
+                    embedding: None,
                 })
             },
         );
@@ -571,12 +589,12 @@ impl CodebaseIndex {
     pub fn list_files(&self, language: Option<&str>, limit: usize) -> Result<Vec<IndexedFile>> {
         let query = match language {
             Some(lang) => format!(
-                "SELECT path, relative_path, language, size, hash, summary, symbols, indexed_at
+                "SELECT path, relative_path, language, size, hash, summary, symbols, indexed_at, content
                  FROM files WHERE language = '{}' ORDER BY relative_path LIMIT {}",
                 lang, limit
             ),
             None => format!(
-                "SELECT path, relative_path, language, size, hash, summary, symbols, indexed_at
+                "SELECT path, relative_path, language, size, hash, summary, symbols, indexed_at, content
                  FROM files ORDER BY relative_path LIMIT {}",
                 limit
             ),
@@ -592,21 +610,57 @@ impl CodebaseIndex {
                 let indexed_at = DateTime::parse_from_rfc3339(&indexed_str)
                     .map(|dt| dt.with_timezone(&Utc))
                     .unwrap_or_else(|_| Utc::now());
+                let content: Option<String> = row.get(8).ok();
+                let lines = content.map(|c| c.lines().count()).unwrap_or(0);
 
                 Ok(IndexedFile {
                     path: row.get(0)?,
                     relative_path: row.get(1)?,
                     language: row.get(2)?,
                     size: row.get(3)?,
+                    lines,
                     hash: row.get(4)?,
                     summary: row.get(5)?,
                     symbols,
                     indexed_at,
+                    embedding: None,
                 })
             })?
             .filter_map(|r| r.ok())
             .collect();
 
         Ok(files)
+    }
+
+    /// Get all indexed files
+    pub fn get_all_files(&self) -> Result<Vec<IndexedFile>> {
+        self.list_files(None, 10000)
+    }
+
+    /// Semantic search using embeddings
+    pub fn search_semantic(&self, query_embedding: &[f32], limit: usize) -> Result<Vec<(IndexedFile, f32)>> {
+        use crate::embeddings::cosine_similarity;
+
+        let embeddings = self.get_all_embeddings()?;
+
+        let mut results: Vec<(String, f32)> = embeddings
+            .iter()
+            .map(|(path, emb)| (path.clone(), cosine_similarity(query_embedding, emb)))
+            .collect();
+
+        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        results.truncate(limit);
+
+        let mut files_with_scores = Vec::new();
+        for (path, score) in results {
+            if let Ok(Some(mut file)) = self.get_file(&path) {
+                // Get the embedding for this file
+                let emb = embeddings.iter().find(|(p, _)| p == &path).map(|(_, e)| e.clone());
+                file.embedding = emb;
+                files_with_scores.push((file, score));
+            }
+        }
+
+        Ok(files_with_scores)
     }
 }

@@ -5,6 +5,7 @@ mod embeddings;
 mod sync;
 mod daemon;
 mod watcher;
+mod rag;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
