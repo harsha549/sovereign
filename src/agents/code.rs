@@ -1,6 +1,6 @@
 use anyhow::Result;
 use crate::llm::OllamaClient;
-use crate::storage::{CodebaseIndex, MemoryStore};
+use crate::storage::MemoryStore;
 use crate::storage::memory::MemoryType;
 
 const CODE_SYSTEM_PROMPT: &str = r#"You are an expert code assistant running locally on the user's machine.

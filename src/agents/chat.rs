@@ -30,7 +30,7 @@ pub struct ChatAgent {
 
 impl ChatAgent {
     pub fn new(llm: OllamaClient, memory: MemoryStore) -> Self {
-        let mut conversation = vec![ChatMessage {
+        let conversation = vec![ChatMessage {
             role: "system".to_string(),
             content: CHAT_SYSTEM_PROMPT.to_string(),
         }];
@@ -158,6 +158,7 @@ impl ChatAgent {
         self.conversation.truncate(1); // Keep system message
     }
 
+    #[allow(dead_code)]
     pub fn conversation_length(&self) -> usize {
         self.conversation.len() - 1 // Exclude system message
     }

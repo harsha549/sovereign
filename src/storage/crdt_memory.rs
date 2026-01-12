@@ -12,6 +12,7 @@ pub struct CrdtMemoryStore {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct CrdtMemory {
     pub id: String,
     pub content: String,
@@ -23,6 +24,7 @@ pub struct CrdtMemory {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[allow(dead_code)]
 pub enum CrdtMemoryType {
     Conversation,
     CodePattern,
@@ -31,6 +33,7 @@ pub enum CrdtMemoryType {
     Fact,
 }
 
+#[allow(dead_code)]
 impl CrdtMemoryType {
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -81,6 +84,7 @@ impl CrdtMemoryStore {
     }
 
     /// Add a new memory
+    #[allow(dead_code)]
     pub fn add(&mut self, content: &str, memory_type: CrdtMemoryType) -> Result<String> {
         let id = Uuid::new_v4().to_string();
         let timestamp = Utc::now().to_rfc3339();
@@ -105,6 +109,7 @@ impl CrdtMemoryStore {
     }
 
     /// Add a memory with project context
+    #[allow(dead_code)]
     pub fn add_with_project(
         &mut self,
         content: &str,
@@ -133,6 +138,7 @@ impl CrdtMemoryStore {
     }
 
     /// Get recent memories
+    #[allow(dead_code)]
     pub fn get_recent(&self, limit: usize) -> Result<Vec<CrdtMemory>> {
         let mut memories = self.get_all()?;
         memories.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
@@ -141,6 +147,7 @@ impl CrdtMemoryStore {
     }
 
     /// Get all memories
+    #[allow(dead_code)]
     pub fn get_all(&self) -> Result<Vec<CrdtMemory>> {
         let memories_list = self.doc.get(ROOT, "memories")?
             .ok_or_else(|| anyhow::anyhow!("Memories list not found"))?;
@@ -159,6 +166,7 @@ impl CrdtMemoryStore {
     }
 
     /// Get memories by type
+    #[allow(dead_code)]
     pub fn get_by_type(&self, memory_type: CrdtMemoryType, limit: usize) -> Result<Vec<CrdtMemory>> {
         let all = self.get_all()?;
         let filtered: Vec<_> = all
@@ -170,6 +178,7 @@ impl CrdtMemoryStore {
     }
 
     /// Get memories by project
+    #[allow(dead_code)]
     pub fn get_by_project(&self, project: &str, limit: usize) -> Result<Vec<CrdtMemory>> {
         let all = self.get_all()?;
         let filtered: Vec<_> = all
@@ -181,6 +190,7 @@ impl CrdtMemoryStore {
     }
 
     /// Update memory importance
+    #[allow(dead_code)]
     pub fn update_importance(&mut self, id: &str, importance: f32) -> Result<()> {
         let memories_list = self.doc.get(ROOT, "memories")?
             .ok_or_else(|| anyhow::anyhow!("Memories list not found"))?;
@@ -203,6 +213,7 @@ impl CrdtMemoryStore {
     }
 
     /// Add tag to memory
+    #[allow(dead_code)]
     pub fn add_tag(&mut self, id: &str, tag: &str) -> Result<()> {
         let memories_list = self.doc.get(ROOT, "memories")?
             .ok_or_else(|| anyhow::anyhow!("Memories list not found"))?;
@@ -228,6 +239,7 @@ impl CrdtMemoryStore {
     }
 
     /// Delete a memory
+    #[allow(dead_code)]
     pub fn delete(&mut self, id: &str) -> Result<()> {
         let memories_list = self.doc.get(ROOT, "memories")?
             .ok_or_else(|| anyhow::anyhow!("Memories list not found"))?;
@@ -268,6 +280,7 @@ impl CrdtMemoryStore {
     }
 
     /// Generate changes since given heads
+    #[allow(dead_code)]
     pub fn generate_sync_message(&mut self, their_heads: &[automerge::ChangeHash]) -> Option<Vec<u8>> {
         let changes = self.doc.get_changes(their_heads);
         if changes.is_empty() {
@@ -278,6 +291,7 @@ impl CrdtMemoryStore {
     }
 
     /// Apply incremental sync changes
+    #[allow(dead_code)]
     pub fn apply_sync_changes(&mut self, changes: &[u8]) -> Result<()> {
         self.doc.load_incremental(changes)?;
         self.save()?;

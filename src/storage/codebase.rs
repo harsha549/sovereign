@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use ignore::WalkBuilder;
 use rusqlite::{params, Connection};
@@ -149,7 +149,7 @@ impl CodebaseIndex {
             if entry.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
                 let path = entry.path();
                 if let Some(lang) = Self::detect_language(path) {
-                    if let Ok(indexed) = self.index_file(path, &lang) {
+                    if let Ok(_indexed) = self.index_file(path, &lang) {
                         count += 1;
                         if show_progress && count % 100 == 0 {
                             println!("  Indexed {} files...", count);

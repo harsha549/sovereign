@@ -1,6 +1,5 @@
 use anyhow::Result;
 use std::path::PathBuf;
-use std::net::SocketAddr;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -23,6 +22,7 @@ impl P2PSync {
     }
 
     /// Start listening for sync requests
+    #[allow(dead_code)]
     pub async fn start_server(&self) -> Result<()> {
         let addr = format!("0.0.0.0:{}", self.port);
         let listener = TcpListener::bind(&addr).await?;
@@ -140,6 +140,7 @@ impl P2PSync {
     }
 }
 
+#[allow(dead_code)]
 async fn handle_sync_connection(mut socket: TcpStream, sync_file: PathBuf) -> Result<()> {
     let mut cmd = [0u8; 4];
     socket.read_exact(&mut cmd).await?;

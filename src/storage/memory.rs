@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
@@ -126,6 +126,7 @@ impl MemoryStore {
         Ok(memory)
     }
 
+    #[allow(dead_code)]
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<Memory>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, content, memory_type, project, tags, created_at, importance
@@ -161,6 +162,7 @@ impl MemoryStore {
         Ok(memories)
     }
 
+    #[allow(dead_code)]
     pub fn get_by_project(&self, project: &str, limit: usize) -> Result<Vec<Memory>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, content, memory_type, project, tags, created_at, importance
@@ -262,6 +264,7 @@ impl MemoryStore {
         Ok(memories)
     }
 
+    #[allow(dead_code)]
     pub fn count(&self) -> Result<usize> {
         let count: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM memories",

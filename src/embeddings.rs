@@ -30,6 +30,7 @@ impl EmbeddingClient {
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_model(model: &str) -> Self {
         Self {
             client: Client::new(),
@@ -55,6 +56,7 @@ impl EmbeddingClient {
         Ok(result.embedding)
     }
 
+    #[allow(dead_code)]
     pub async fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         let mut embeddings = Vec::with_capacity(texts.len());
         for text in texts {

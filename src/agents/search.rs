@@ -1,7 +1,7 @@
 use anyhow::Result;
 use crate::llm::OllamaClient;
 use crate::storage::CodebaseIndex;
-use crate::embeddings::{EmbeddingClient, cosine_similarity, find_similar};
+use crate::embeddings::{EmbeddingClient, find_similar};
 
 pub struct SearchAgent {
     llm: OllamaClient,
@@ -195,6 +195,7 @@ pub struct SearchResult {
     pub language: String,
     pub symbols: Vec<String>,
     pub relevance: f32,
+    #[allow(dead_code)]
     pub snippet: Option<String>,
 }
 

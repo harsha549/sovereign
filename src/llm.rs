@@ -24,7 +24,9 @@ struct GenerateRequest {
 #[derive(Debug, Deserialize)]
 struct GenerateResponse {
     response: String,
+    #[allow(dead_code)]
     done: bool,
+    #[allow(dead_code)]
     context: Option<Vec<i64>>,
 }
 
@@ -44,6 +46,7 @@ pub struct ChatMessage {
 #[derive(Debug, Deserialize)]
 struct ChatResponse {
     message: Option<ChatMessage>,
+    #[allow(dead_code)]
     done: bool,
 }
 
