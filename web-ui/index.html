@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sovereign - Local AI Code Assistant</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- highlight.js for code syntax highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <!-- marked.js for markdown rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/11.1.1/marked.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1 class="logo">Sovereign</h1>
+                <span class="tagline">Local AI Code Assistant</span>
+            </div>
+
+            <div class="sidebar-section">
+                <h3 class="section-title">Connection</h3>
+                <div class="connection-status">
+                    <span class="status-dot" id="statusDot"></span>
+                    <span id="connectionStatus">Disconnected</span>
+                </div>
+                <button id="connectBtn" class="btn btn-primary">Connect</button>
+            </div>
+
+            <div class="sidebar-section">
+                <h3 class="section-title">Codebase Stats</h3>
+                <div id="statsContainer" class="stats-container">
+                    <p class="empty-state">Not connected</p>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <h3 class="section-title">Memory</h3>
+                <div id="memoryContainer" class="memory-container">
+                    <p class="empty-state">Not connected</p>
+                </div>
+                <button id="refreshMemory" class="btn btn-secondary" disabled>Refresh</button>
+            </div>
+
+            <div class="sidebar-section">
+                <h3 class="section-title">Settings</h3>
+                <div class="settings-group">
+                    <label for="wsUrl">WebSocket URL</label>
+                    <input type="text" id="wsUrl" value="ws://localhost:7656" placeholder="ws://localhost:7656">
+                </div>
+                <div class="settings-group">
+                    <label for="tcpPort">TCP Port (fallback)</label>
+                    <input type="number" id="tcpPort" value="7655" placeholder="7655">
+                </div>
+            </div>
+
+            <div class="sidebar-footer">
+                <span class="version">v0.1.0</span>
+                <span class="privacy-note">Your code never leaves your machine</span>
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="main-content">
+            <div class="chat-container" id="chatContainer">
+                <div class="welcome-message" id="welcomeMessage">
+                    <div class="welcome-logo">
+                        <pre class="ascii-art">
+  ____                            _
+ / ___|  _____   _____ _ __ ___(_) __ _ _ __
+ \___ \ / _ \ \ / / _ \ '__/ _ \ |/ _` | '_ \
+  ___) | (_) \ V /  __/ | |  __/ | (_| | | | |
+ |____/ \___/ \_/ \___|_|  \___|_|\__, |_| |_|
+                                  |___/
+                        </pre>
+                    </div>
+                    <h2>Welcome to Sovereign</h2>
+                    <p>Your local-first AI code assistant</p>
+                    <div class="quick-commands">
+                        <h4>Quick Commands:</h4>
+                        <div class="command-grid">
+                            <button class="command-btn" data-command="/help">Show Help</button>
+                            <button class="command-btn" data-command="/stats">View Stats</button>
+                            <button class="command-btn" data-command="/memory">Show Memory</button>
+                            <button class="command-btn" data-command="/clear">Clear Chat</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-container">
+                <div class="input-wrapper">
+                    <textarea
+                        id="messageInput"
+                        placeholder="Ask about your code, or type /help for commands..."
+                        rows="1"
+                        disabled
+                    ></textarea>
+                    <button id="sendBtn" class="btn btn-send" disabled>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="input-hint">
+                    Press <kbd>Enter</kbd> to send, <kbd>Shift+Enter</kbd> for new line
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
