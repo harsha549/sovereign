@@ -3,6 +3,8 @@ mod storage;
 mod agents;
 mod embeddings;
 mod sync;
+mod daemon;
+mod watcher;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -92,6 +94,27 @@ enum Commands {
         /// Number of memories to show
         #[arg(short, long, default_value = "10")]
         limit: usize,
+    },
+
+    /// Start background daemon
+    Daemon {
+        /// Use TCP instead of Unix socket
+        #[arg(long)]
+        tcp: bool,
+
+        /// TCP port (default: 7655)
+        #[arg(short, long)]
+        port: Option<u16>,
+
+        /// Watch directories for auto-reindex
+        #[arg(short, long)]
+        watch: Vec<PathBuf>,
+    },
+
+    /// Watch directories for changes and auto-reindex
+    Watch {
+        /// Directories to watch
+        paths: Vec<PathBuf>,
     },
 }
 
@@ -216,6 +239,53 @@ async fn main() -> Result<()> {
                     );
                 }
             }
+        }
+
+        Some(Commands::Daemon { tcp, port, watch }) => {
+            println!("{}", BANNER.cyan());
+            println!("{}", "Starting Sovereign daemon...".green());
+
+            let mut daemon = daemon::Daemon::new(&cli.model, data_dir.clone())?;
+
+            // Start file watcher if paths provided
+            if !watch.is_empty() {
+                println!("Starting file watcher...");
+                daemon.start_watcher(watch).await?;
+            }
+
+            // Start the daemon server
+            if tcp {
+                daemon.start_tcp(port).await?;
+            } else {
+                #[cfg(unix)]
+                {
+                    daemon.start_unix().await?;
+                }
+                #[cfg(not(unix))]
+                {
+                    daemon.start_tcp(port).await?;
+                }
+            }
+        }
+
+        Some(Commands::Watch { paths }) => {
+            if paths.is_empty() {
+                eprintln!("{}", "Error: No paths to watch specified".red());
+                std::process::exit(1);
+            }
+
+            println!("{}", BANNER.cyan());
+            println!("{}", "Starting Sovereign with file watcher...".green());
+
+            // Start daemon with watcher enabled
+            let mut daemon = daemon::Daemon::new(&cli.model, data_dir.clone())?;
+            daemon.start_watcher(paths).await?;
+
+            println!("{}", "Watching for changes. Press Ctrl+C to stop.".green());
+
+            // Keep running until interrupted
+            tokio::signal::ctrl_c().await?;
+            println!("\n{}", "Stopped watching.".yellow());
         }
 
         None => {

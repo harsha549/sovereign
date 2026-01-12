@@ -60,5 +60,11 @@ automerge = "0.5"
 # Networking utilities
 hostname = "0.4"
 
+# File watching
+notify = "6.1"
+
+# MD5 for quick hashing
+md5 = "0.7"
+
 [dev-dependencies]
 tempfile = "3"
