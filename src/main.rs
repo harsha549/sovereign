@@ -1,4 +1,5 @@
 mod llm;
+mod deepseek;
 mod storage;
 mod agents;
 mod embeddings;
@@ -6,6 +7,7 @@ mod sync;
 mod daemon;
 mod watcher;
 mod rag;
+mod git;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -15,6 +17,7 @@ use rustyline::DefaultEditor;
 use std::path::PathBuf;
 
 use agents::Orchestrator;
+use llm::LlmBackend;
 
 const BANNER: &str = r#"
   ____                            _
@@ -35,9 +38,17 @@ struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
 
-    /// Model to use (default: qwen2.5-coder:14b)
-    #[arg(short, long, default_value = "qwen2.5-coder:14b")]
-    model: String,
+    /// Model to use (default: qwen2.5-coder:14b for Ollama, deepseek-chat for DeepSeek)
+    #[arg(short, long)]
+    model: Option<String>,
+
+    /// LLM backend to use (ollama, deepseek)
+    #[arg(short, long, default_value = "ollama")]
+    backend: String,
+
+    /// API key for DeepSeek (can also use DEEPSEEK_API_KEY env var)
+    #[arg(long)]
+    api_key: Option<String>,
 
     /// Data directory for storage
     #[arg(short, long)]
@@ -107,6 +118,14 @@ enum Commands {
         #[arg(short, long)]
         port: Option<u16>,
 
+        /// Enable WebSocket server for real-time streaming
+        #[arg(long)]
+        websocket: bool,
+
+        /// WebSocket port (default: 7656)
+        #[arg(long, default_value = "7656")]
+        ws_port: u16,
+
         /// Watch directories for auto-reindex
         #[arg(short, long)]
         watch: Vec<PathBuf>,
@@ -117,6 +136,23 @@ enum Commands {
         /// Directories to watch
         paths: Vec<PathBuf>,
     },
+
+    /// Serve the web UI dashboard
+    Serve {
+        /// Port to serve web UI on (default: 7657)
+        #[arg(short, long, default_value = "7657")]
+        port: u16,
+
+        /// Path to web-ui directory (default: ./web-ui)
+        #[arg(long)]
+        dir: Option<PathBuf>,
+    },
+
+    /// Generate a commit message for staged changes
+    Commit,
+
+    /// Generate a PR summary for the current branch
+    PrSummary,
 }
 
 #[tokio::main]
@@ -132,22 +168,52 @@ async fn main() -> Result<()> {
 
     std::fs::create_dir_all(&data_dir)?;
 
-    // Check if Ollama is available
-    let test_client = llm::OllamaClient::new(&cli.model);
-    if !test_client.is_available().await {
-        eprintln!("{}", "Error: Ollama is not running.".red());
-        eprintln!("Start Ollama with: {}", "brew services start ollama".cyan());
-        eprintln!("Or run: {}", "ollama serve".cyan());
-        std::process::exit(1);
+    // Parse backend
+    let backend = LlmBackend::from_str(&cli.backend).unwrap_or_else(|| {
+        eprintln!("{}", format!("Unknown backend: {}. Using 'ollama'.", cli.backend).yellow());
+        LlmBackend::Ollama
+    });
+
+    // Determine default model based on backend
+    let model = cli.model.unwrap_or_else(|| {
+        match backend {
+            LlmBackend::Ollama => "qwen2.5-coder:14b".to_string(),
+            LlmBackend::DeepSeek => "deepseek-chat".to_string(),
+        }
+    });
+
+    // Check if backend is available
+    let test_client = llm::LlmClient::new(backend, &model, cli.api_key.as_deref());
+    match test_client {
+        Ok(client) => {
+            if !client.is_available().await {
+                match backend {
+                    LlmBackend::Ollama => {
+                        eprintln!("{}", "Error: Ollama is not running.".red());
+                        eprintln!("Start Ollama with: {}", "brew services start ollama".cyan());
+                        eprintln!("Or run: {}", "ollama serve".cyan());
+                    }
+                    LlmBackend::DeepSeek => {
+                        eprintln!("{}", "Error: Cannot connect to DeepSeek API.".red());
+                        eprintln!("Check your API key and internet connection.");
+                    }
+                }
+                std::process::exit(1);
+            }
+        }
+        Err(e) => {
+            eprintln!("{}", format!("Error initializing LLM client: {}", e).red());
+            std::process::exit(1);
+        }
     }
 
     match cli.command {
         Some(Commands::Chat { path }) => {
-            run_chat(&cli.model, &data_dir, path).await?;
+            run_chat(&model, backend, cli.api_key.as_deref(), &data_dir, path).await?;
         }
 
         Some(Commands::Index { path }) => {
-            let mut orchestrator = Orchestrator::new(&cli.model, data_dir)?;
+            let mut orchestrator = Orchestrator::new(&model, backend, cli.api_key.as_deref(), data_dir)?;
             println!("{}", "Indexing codebase...".cyan());
             let count = orchestrator.index_codebase(&path)?;
             println!("{}", format!("Indexed {} files.", count).green());
@@ -164,7 +230,7 @@ async fn main() -> Result<()> {
         }
 
         Some(Commands::Search { query }) => {
-            let orchestrator = Orchestrator::new(&cli.model, data_dir)?;
+            let orchestrator = Orchestrator::new(&model, backend, cli.api_key.as_deref(), data_dir)?;
             // Need to have indexed first
             println!("{}", "Searching...".cyan());
             let result = orchestrator.chat_agent.llm.generate(&query, None).await?;
@@ -172,7 +238,7 @@ async fn main() -> Result<()> {
         }
 
         Some(Commands::Ask { question, path }) => {
-            let mut orchestrator = Orchestrator::new(&cli.model, data_dir.clone())?;
+            let mut orchestrator = Orchestrator::new(&model, backend, cli.api_key.as_deref(), data_dir.clone())?;
 
             if let Some(p) = path {
                 orchestrator.index_codebase(&p)?;
@@ -184,7 +250,7 @@ async fn main() -> Result<()> {
         }
 
         Some(Commands::Generate { request }) => {
-            let orchestrator = Orchestrator::new(&cli.model, data_dir)?;
+            let orchestrator = Orchestrator::new(&model, backend, cli.api_key.as_deref(), data_dir)?;
             println!("{}", "Generating...".cyan());
             // generate_code uses streaming which prints directly to stdout
             orchestrator.code_agent.generate_code(&request, None, None).await?;
@@ -202,7 +268,7 @@ async fn main() -> Result<()> {
                 buffer
             };
 
-            let orchestrator = Orchestrator::new(&cli.model, data_dir)?;
+            let orchestrator = Orchestrator::new(&model, backend, cli.api_key.as_deref(), data_dir)?;
             println!("{}", "Explaining...".cyan());
             // explain_code uses streaming which prints directly to stdout
             orchestrator.code_agent.explain_code(&code, None).await?;
@@ -210,7 +276,7 @@ async fn main() -> Result<()> {
         }
 
         Some(Commands::Stats) => {
-            let orchestrator = Orchestrator::new(&cli.model, data_dir)?;
+            let orchestrator = Orchestrator::new(&model, backend, cli.api_key.as_deref(), data_dir)?;
             if let Some(stats) = orchestrator.get_codebase_stats() {
                 println!("Codebase Statistics:");
                 println!("  Files: {}", stats.total_files);
@@ -225,7 +291,7 @@ async fn main() -> Result<()> {
         }
 
         Some(Commands::Memory { limit }) => {
-            let orchestrator = Orchestrator::new(&cli.model, data_dir)?;
+            let orchestrator = Orchestrator::new(&model, backend, cli.api_key.as_deref(), data_dir)?;
             let memories = orchestrator.memory.get_recent(limit)?;
 
             if memories.is_empty() {
@@ -242,16 +308,26 @@ async fn main() -> Result<()> {
             }
         }
 
-        Some(Commands::Daemon { tcp, port, watch }) => {
+        Some(Commands::Daemon { tcp, port, websocket, ws_port, watch }) => {
             println!("{}", BANNER.cyan());
             println!("{}", "Starting Sovereign daemon...".green());
 
-            let mut daemon = daemon::Daemon::new(&cli.model, data_dir.clone())?;
+            let mut daemon = daemon::Daemon::new(&model, backend, cli.api_key.as_deref(), data_dir.clone())?;
 
             // Start file watcher if paths provided
             if !watch.is_empty() {
                 println!("Starting file watcher...");
                 daemon.start_watcher(watch).await?;
+            }
+
+            // Start WebSocket server if enabled (runs in background)
+            if websocket {
+                let daemon_clone = daemon.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = daemon_clone.start_websocket(Some(ws_port)).await {
+                        eprintln!("WebSocket server error: {}", e);
+                    }
+                });
             }
 
             // Start the daemon server
@@ -279,7 +355,7 @@ async fn main() -> Result<()> {
             println!("{}", "Starting Sovereign with file watcher...".green());
 
             // Start daemon with watcher enabled
-            let mut daemon = daemon::Daemon::new(&cli.model, data_dir.clone())?;
+            let mut daemon = daemon::Daemon::new(&model, backend, cli.api_key.as_deref(), data_dir.clone())?;
             daemon.start_watcher(paths).await?;
 
             println!("{}", "Watching for changes. Press Ctrl+C to stop.".green());
@@ -289,16 +365,76 @@ async fn main() -> Result<()> {
             println!("\n{}", "Stopped watching.".yellow());
         }
 
+        Some(Commands::Commit) => {
+            let orchestrator = Orchestrator::new(&model, backend, cli.api_key.as_deref(), data_dir)?;
+            println!("{}", "Analyzing staged changes...".cyan());
+            match orchestrator.git_agent.commit_message_for_staged().await {
+                Ok(message) => {
+                    println!("\n{}\n", "Suggested commit message:".green());
+                    println!("{}", message);
+                }
+                Err(e) => {
+                    println!("{}", format!("Error: {}", e).red());
+                }
+            }
+        }
+
+        Some(Commands::PrSummary) => {
+            let orchestrator = Orchestrator::new(&model, backend, cli.api_key.as_deref(), data_dir)?;
+            println!("{}", "Analyzing branch changes...".cyan());
+            match orchestrator.git_agent.pr_summary_for_branch().await {
+                Ok(summary) => {
+                    println!("\n{}\n", "PR Summary:".green());
+                    println!("{}", summary);
+                }
+                Err(e) => {
+                    println!("{}", format!("Error: {}", e).red());
+                }
+            }
+        }
+
+        Some(Commands::Serve { port, dir }) => {
+            println!("{}", BANNER.cyan());
+            println!("{}", "Starting Sovereign Web UI server...".green());
+
+            // Determine web-ui directory
+            let web_ui_dir = dir.unwrap_or_else(|| {
+                std::env::current_dir()
+                    .unwrap_or_else(|_| PathBuf::from("."))
+                    .join("web-ui")
+            });
+
+            if !web_ui_dir.exists() {
+                eprintln!("{}", format!("Error: web-ui directory not found at {}", web_ui_dir.display()).red());
+                eprintln!("Make sure the web-ui directory exists or specify the path with --dir");
+                std::process::exit(1);
+            }
+
+            println!("Serving: {}", web_ui_dir.display().to_string().green());
+            println!("URL:     {}", format!("http://localhost:{}", port).cyan());
+            println!();
+            println!("{}", "Press Ctrl+C to stop.".bright_black());
+
+            // Start simple HTTP server for static files
+            serve_web_ui(&web_ui_dir, port).await?;
+        }
+
         None => {
             // Default to chat mode
-            run_chat(&cli.model, &data_dir, None).await?;
+            run_chat(&model, backend, cli.api_key.as_deref(), &data_dir, None).await?;
         }
     }
 
     Ok(())
 }
 
-async fn run_chat(model: &str, data_dir: &PathBuf, codebase_path: Option<PathBuf>) -> Result<()> {
+async fn run_chat(
+    model: &str,
+    backend: LlmBackend,
+    api_key: Option<&str>,
+    data_dir: &PathBuf,
+    codebase_path: Option<PathBuf>,
+) -> Result<()> {
     println!("{}", BANNER.cyan());
     println!(
         "{}",
@@ -307,12 +443,13 @@ async fn run_chat(model: &str, data_dir: &PathBuf, codebase_path: Option<PathBuf
     println!("{}", "Your code never leaves your machine.".bright_black());
     println!();
     println!("Model: {}", model.green());
+    println!("Backend: {}", backend.as_str().green());
     println!("Data:  {}", data_dir.display().to_string().green());
     println!();
     println!("Type {} for commands, or just chat!", "/help".cyan());
     println!("{}", "─".repeat(50).bright_black());
 
-    let mut orchestrator = Orchestrator::new(model, data_dir.clone())?;
+    let mut orchestrator = Orchestrator::new(model, backend, api_key, data_dir.clone())?;
 
     // Index codebase if provided
     if let Some(path) = codebase_path {
@@ -390,5 +527,76 @@ async fn run_chat(model: &str, data_dir: &PathBuf, codebase_path: Option<PathBuf
     let _ = rl.save_history(&history_path);
 
     Ok(())
+}
+
+/// Serve static files from the web-ui directory
+async fn serve_web_ui(dir: &PathBuf, port: u16) -> Result<()> {
+    use tokio::net::TcpListener;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let addr = format!("127.0.0.1:{}", port);
+    let listener = TcpListener::bind(&addr).await?;
+
+    loop {
+        match listener.accept().await {
+            Ok((mut stream, _)) => {
+                let dir = dir.clone();
+                tokio::spawn(async move {
+                    let mut buffer = [0; 4096];
+                    if let Ok(n) = stream.read(&mut buffer).await {
+                        let request = String::from_utf8_lossy(&buffer[..n]);
+
+                        // Parse the request path
+                        let path = request
+                            .lines()
+                            .next()
+                            .and_then(|line| line.split_whitespace().nth(1))
+                            .unwrap_or("/");
+
+                        // Serve the file
+                        let file_path = if path == "/" {
+                            dir.join("index.html")
+                        } else {
+                            dir.join(path.trim_start_matches('/'))
+                        };
+
+                        let (status, content_type, body) = if file_path.exists() && file_path.is_file() {
+                            let content_type = match file_path.extension().and_then(|e| e.to_str()) {
+                                Some("html") => "text/html; charset=utf-8",
+                                Some("css") => "text/css; charset=utf-8",
+                                Some("js") => "application/javascript; charset=utf-8",
+                                Some("json") => "application/json",
+                                Some("png") => "image/png",
+                                Some("jpg") | Some("jpeg") => "image/jpeg",
+                                Some("svg") => "image/svg+xml",
+                                Some("ico") => "image/x-icon",
+                                _ => "application/octet-stream",
+                            };
+
+                            match std::fs::read(&file_path) {
+                                Ok(content) => ("200 OK", content_type, content),
+                                Err(_) => ("500 Internal Server Error", "text/plain", b"Error reading file".to_vec()),
+                            }
+                        } else {
+                            ("404 Not Found", "text/plain", b"File not found".to_vec())
+                        };
+
+                        let response = format!(
+                            "HTTP/1.1 {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\n\r\n",
+                            status,
+                            content_type,
+                            body.len()
+                        );
+
+                        let _ = stream.write_all(response.as_bytes()).await;
+                        let _ = stream.write_all(&body).await;
+                    }
+                });
+            }
+            Err(e) => {
+                eprintln!("Accept error: {}", e);
+            }
+        }
+    }
 }
 
