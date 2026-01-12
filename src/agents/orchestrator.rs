@@ -1,10 +1,12 @@
 use anyhow::Result;
 use std::path::PathBuf;
+use std::pin::Pin;
+use futures::stream::Stream;
 
-use crate::llm::OllamaClient;
+use crate::llm::{LlmBackend, LlmClient};
 use crate::storage::{CodebaseIndex, MemoryStore, CrdtMemoryStore};
 use crate::sync::P2PSync;
-use super::{CodeAgent, SearchAgent, ChatAgent};
+use super::{CodeAgent, SearchAgent, ChatAgent, GitAgent};
 
 const SYNC_PORT: u16 = 7654;
 
@@ -12,6 +14,7 @@ pub struct Orchestrator {
     pub code_agent: CodeAgent,
     pub search_agent: SearchAgent,
     pub chat_agent: ChatAgent,
+    pub git_agent: GitAgent,
     pub codebase: Option<CodebaseIndex>,
     pub memory: MemoryStore,
     pub crdt_memory: CrdtMemoryStore,
@@ -20,27 +23,30 @@ pub struct Orchestrator {
 }
 
 impl Orchestrator {
-    pub fn new(model: &str, data_dir: PathBuf) -> Result<Self> {
-        let _llm = OllamaClient::new(model);
+    pub fn new(model: &str, backend: LlmBackend, api_key: Option<&str>, data_dir: PathBuf) -> Result<Self> {
         let memory = MemoryStore::new(&data_dir)?;
         let crdt_memory = CrdtMemoryStore::new(&data_dir)?;
         let p2p_sync = P2PSync::new(data_dir.clone(), SYNC_PORT);
 
-        let code_llm = OllamaClient::new(model);
+        let code_llm = LlmClient::new(backend, model, api_key)?;
         let code_memory = MemoryStore::new(&data_dir)?;
         let code_agent = CodeAgent::new(code_llm, code_memory);
 
-        let search_llm = OllamaClient::new(model);
+        let search_llm = LlmClient::new(backend, model, api_key)?;
         let search_agent = SearchAgent::new(search_llm);
 
-        let chat_llm = OllamaClient::new(model);
+        let chat_llm = LlmClient::new(backend, model, api_key)?;
         let chat_memory = MemoryStore::new(&data_dir)?;
         let chat_agent = ChatAgent::new(chat_llm, chat_memory);
+
+        let git_llm = LlmClient::new(backend, model, api_key)?;
+        let git_agent = GitAgent::new(git_llm);
 
         Ok(Self {
             code_agent,
             search_agent,
             chat_agent,
+            git_agent,
             codebase: None,
             memory,
             crdt_memory,
@@ -89,6 +95,35 @@ impl Orchestrator {
 
         // Default to chat
         self.chat_agent.chat(input).await
+    }
+
+    /// Process a command with streaming response for WebSocket support
+    pub async fn process_command_streaming(
+        &mut self,
+        input: &str,
+    ) -> Result<Pin<Box<dyn Stream<Item = String> + Send>>> {
+        let input = input.trim();
+
+        // Commands that don't stream - wrap result in a single-item stream
+        if input.starts_with('/') {
+            let result = self.handle_command(input).await?;
+            let stream = futures::stream::once(async move { result });
+            return Ok(Box::pin(stream));
+        }
+
+        // Chat with streaming
+        let mut rx = self.chat_agent.chat_streaming(input).await?;
+
+        // Convert the mpsc receiver to a stream
+        let stream = async_stream::stream! {
+            let mut full_response = String::new();
+            while let Some(chunk) = rx.recv().await {
+                full_response.push_str(&chunk);
+                yield chunk;
+            }
+        };
+
+        Ok(Box::pin(stream))
     }
 
     async fn handle_command(&mut self, input: &str) -> Result<String> {
@@ -329,6 +364,14 @@ impl Orchestrator {
                 Ok("Conversation cleared.".to_string())
             }
 
+            "/commit" => {
+                self.git_agent.commit_message_for_staged().await
+            }
+
+            "/pr-summary" | "/pr" => {
+                self.git_agent.pr_summary_for_branch().await
+            }
+
             "/help" | "/h" => {
                 Ok(HELP_TEXT.to_string())
             }
@@ -358,6 +401,10 @@ COMMANDS:
   /test, /t <code>         Generate tests
   /fix <desc> ```code```   Fix a bug
   /refactor <desc> ```code```  Refactor code
+
+GIT:
+  /commit                  Generate commit message for staged changes
+  /pr-summary, /pr         Generate PR summary for current branch
 
   /memory, /mem            Show recent memories
   /clear                   Clear conversation
