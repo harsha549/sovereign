@@ -289,6 +289,10 @@ sovereign --model qwen2.5-coder:7b
 - [ ] File watching for auto-reindex
 - [ ] Multi-modal support (diagrams, images)
 
+## Author
+
+**Harsha549** - [harsha549@linux.com](mailto:harsha549@linux.com)
+
 ## License
 
 MIT
