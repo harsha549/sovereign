@@ -1,0 +1,92 @@
+<idea-plugin>
+    <id>com.sovereign.plugin</id>
+    <name>Sovereign - Local-First AI Code Assistant</name>
+    <vendor email="harsha549@linux.com" url="https://github.com/harsha549/sovereign">Harsha549</vendor>
+
+    <description><![CDATA[
+    <h2>Sovereign - Local-First AI Code Assistant</h2>
+    <p>AI-powered code assistant that runs entirely on your machine. Your code never leaves your device.</p>
+
+    <h3>Features</h3>
+    <ul>
+        <li><b>100% Local</b> - Uses Ollama for local LLM inference</li>
+        <li><b>Privacy First</b> - No data sent to external servers</li>
+        <li><b>Code Explanation</b> - Understand any code instantly</li>
+        <li><b>Code Review</b> - Get AI-powered code reviews</li>
+        <li><b>Code Generation</b> - Generate code from descriptions</li>
+        <li><b>Bug Fixing</b> - AI-assisted debugging</li>
+        <li><b>Test Generation</b> - Auto-generate unit tests</li>
+        <li><b>Refactoring</b> - Smart code refactoring suggestions</li>
+    </ul>
+
+    <h3>Requirements</h3>
+    <ul>
+        <li>Ollama installed and running (<code>ollama serve</code>)</li>
+        <li>A coding model pulled (<code>ollama pull qwen2.5-coder:14b</code>)</li>
+    </ul>
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.lang</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow id="Sovereign"
+                    secondary="true"
+                    icon="/icons/sovereign.svg"
+                    anchor="right"
+                    factoryClass="com.sovereign.plugin.ui.SovereignToolWindowFactory"/>
+
+        <applicationService serviceImplementation="com.sovereign.plugin.services.OllamaService"/>
+        <projectService serviceImplementation="com.sovereign.plugin.services.SovereignService"/>
+
+        <notificationGroup id="Sovereign Notifications"
+                          displayType="BALLOON"/>
+    </extensions>
+
+    <actions>
+        <group id="Sovereign.EditorPopupMenu" text="Sovereign" popup="true">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+
+            <action id="Sovereign.ExplainCode"
+                    class="com.sovereign.plugin.actions.ExplainCodeAction"
+                    text="Explain Selection"
+                    description="Explain the selected code using AI"/>
+
+            <action id="Sovereign.ReviewCode"
+                    class="com.sovereign.plugin.actions.ReviewCodeAction"
+                    text="Review Code"
+                    description="Review the selected code for improvements"/>
+
+            <action id="Sovereign.RefactorCode"
+                    class="com.sovereign.plugin.actions.RefactorCodeAction"
+                    text="Refactor Selection"
+                    description="Refactor the selected code"/>
+
+            <action id="Sovereign.FixBug"
+                    class="com.sovereign.plugin.actions.FixBugAction"
+                    text="Fix Bug"
+                    description="Fix a bug in the selected code"/>
+
+            <action id="Sovereign.GenerateTests"
+                    class="com.sovereign.plugin.actions.GenerateTestsAction"
+                    text="Generate Tests"
+                    description="Generate unit tests for the selected code"/>
+        </group>
+
+        <action id="Sovereign.GenerateCode"
+                class="com.sovereign.plugin.actions.GenerateCodeAction"
+                text="Sovereign: Generate Code"
+                description="Generate code from a description">
+            <add-to-group group-id="GenerateGroup" anchor="last"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt G"/>
+        </action>
+
+        <action id="Sovereign.OpenChat"
+                class="com.sovereign.plugin.actions.OpenChatAction"
+                text="Sovereign: Open Chat"
+                description="Open the Sovereign chat panel">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt S"/>
+        </action>
+    </actions>
+</idea-plugin>
