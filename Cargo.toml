@@ -1,0 +1,64 @@
+[package]
+name = "sovereign"
+version = "0.1.0"
+edition = "2021"
+description = "Local-first AI code assistant - your code never leaves your machine"
+authors = ["Harsha"]
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+
+# HTTP client for Ollama
+reqwest = { version = "0.11", features = ["json", "stream"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# CLI
+clap = { version = "4.4", features = ["derive"] }
+colored = "2.1"
+
+# Database for memory
+rusqlite = { version = "0.30", features = ["bundled"] }
+
+# File walking
+walkdir = "2.4"
+ignore = "0.4"
+
+# UUID for IDs
+uuid = { version = "1.6", features = ["v4"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Hashing for file change detection
+sha2 = "0.10"
+hex = "0.4"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Progress bars
+indicatif = "0.17"
+
+# Prompt for interactive mode
+rustyline = "13.0"
+
+# Directory for config/data
+dirs = "5.0"
+
+# Async streams
+futures = "0.3"
+async-trait = "0.1"
+
+# CRDT for local-first sync
+automerge = "0.5"
+
+# Networking utilities
+hostname = "0.4"
+
+[dev-dependencies]
+tempfile = "3"

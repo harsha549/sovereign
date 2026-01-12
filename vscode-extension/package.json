@@ -1,0 +1,151 @@
+{
+  "name": "sovereign",
+  "displayName": "Sovereign - Local-First AI Code Assistant",
+  "description": "AI code assistant that runs entirely on your machine. Your code never leaves your device.",
+  "version": "0.1.0",
+  "publisher": "sovereign",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Machine Learning",
+    "Other"
+  ],
+  "keywords": [
+    "ai",
+    "code assistant",
+    "local-first",
+    "ollama",
+    "llm"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "sovereign.chat",
+        "title": "Sovereign: Open Chat"
+      },
+      {
+        "command": "sovereign.explain",
+        "title": "Sovereign: Explain Selection"
+      },
+      {
+        "command": "sovereign.generate",
+        "title": "Sovereign: Generate Code"
+      },
+      {
+        "command": "sovereign.review",
+        "title": "Sovereign: Review Code"
+      },
+      {
+        "command": "sovereign.refactor",
+        "title": "Sovereign: Refactor Selection"
+      },
+      {
+        "command": "sovereign.fix",
+        "title": "Sovereign: Fix Bug"
+      },
+      {
+        "command": "sovereign.tests",
+        "title": "Sovereign: Generate Tests"
+      },
+      {
+        "command": "sovereign.index",
+        "title": "Sovereign: Index Workspace"
+      },
+      {
+        "command": "sovereign.search",
+        "title": "Sovereign: Search Codebase"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "sovereign.explain",
+          "when": "editorHasSelection",
+          "group": "sovereign@1"
+        },
+        {
+          "command": "sovereign.review",
+          "when": "editorHasSelection",
+          "group": "sovereign@2"
+        },
+        {
+          "command": "sovereign.refactor",
+          "when": "editorHasSelection",
+          "group": "sovereign@3"
+        },
+        {
+          "command": "sovereign.fix",
+          "when": "editorHasSelection",
+          "group": "sovereign@4"
+        },
+        {
+          "command": "sovereign.tests",
+          "when": "editorHasSelection",
+          "group": "sovereign@5"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Sovereign",
+      "properties": {
+        "sovereign.model": {
+          "type": "string",
+          "default": "qwen2.5-coder:14b",
+          "description": "Ollama model to use"
+        },
+        "sovereign.ollamaUrl": {
+          "type": "string",
+          "default": "http://localhost:11434",
+          "description": "Ollama API URL"
+        },
+        "sovereign.autoIndex": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically index workspace on startup"
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sovereign",
+          "title": "Sovereign",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "sovereign": [
+        {
+          "type": "webview",
+          "id": "sovereign.chatView",
+          "name": "Chat"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "eslint": "^8.54.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.2"
+  }
+}

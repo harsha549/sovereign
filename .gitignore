@@ -1,0 +1,30 @@
+# Build
+/target
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Sovereign data (local only)
+.sovereign/
+*.db
+*.db-shm
+*.db-wal
+
+# VS Code extension build
+vscode-extension/node_modules/
+vscode-extension/out/
+vscode-extension/*.vsix
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.*
