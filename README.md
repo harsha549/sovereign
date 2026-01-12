@@ -18,10 +18,15 @@
 - **Persistent Memory** - Remembers context across sessions
 - **Codebase Indexing** - Understands your entire project
 - **Semantic Search** - Find code by meaning using vector embeddings
+- **Hybrid RAG** - Intelligent retrieval combining semantic and keyword search
 - **CRDT Sync** - Conflict-free sync across devices with Automerge
 - **P2P Sync** - Sync directly with other devices, no server needed
+- **Background Daemon** - Run as a service with auto-reindexing
+- **File Watching** - Automatically reindex on file changes
+- **Multi-Modal** - Analyze images, diagrams, and code screenshots
 - **Works Offline** - No internet required
-- **VS Code Extension** - Integrated AI assistance in your editor
+- **VS Code Extension** - Full-featured AI assistance with streaming
+- **IntelliJ Plugin** - Native Kotlin plugin for JetBrains IDEs
 - **Multi-Language** - Supports Rust, Python, JavaScript, TypeScript, Go, Java, and more
 
 ## Installation
@@ -102,6 +107,22 @@ sovereign stats
 
 ```bash
 sovereign memory
+```
+
+### Background Daemon
+
+```bash
+# Start daemon with Unix socket (macOS/Linux)
+sovereign daemon
+
+# Start daemon with TCP
+sovereign daemon --tcp --port 7655
+
+# Start daemon with file watching
+sovereign daemon --watch /path/to/project
+
+# Watch directories for changes (standalone)
+sovereign watch /path/to/project /another/project
 ```
 
 ## Chat Commands
@@ -201,32 +222,74 @@ Then press F5 in VS Code to run the extension in development mode.
 
 ### Features
 
-- **Chat Panel** - AI chat in the sidebar
+- **Chat Panel** - AI chat in the sidebar with streaming responses
 - **Context Menu** - Right-click to explain, review, refactor, or fix code
 - **Code Generation** - Generate code from descriptions
 - **Test Generation** - Automatically generate tests
+- **Streaming Responses** - Real-time token streaming
+- **Code Actions** - Copy and insert generated code
+- **Request Cancellation** - Stop long-running requests
+
+## IntelliJ Plugin
+
+Native Kotlin plugin for JetBrains IDEs (IntelliJ IDEA, WebStorm, PyCharm, etc.).
+
+### Installation
+
+```bash
+cd intellij-plugin
+./gradlew buildPlugin
+```
+
+The plugin will be in `build/distributions/`. Install via Settings → Plugins → Install from disk.
+
+### Features
+
+- **Tool Window** - Sovereign panel in the IDE
+- **Context Actions** - Right-click menu for code operations
+- **Streaming Chat** - Real-time AI responses
+- **Code Actions**:
+  - Explain Code
+  - Review Code
+  - Refactor Code
+  - Fix Bug
+  - Generate Tests
+  - Generate Code
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      Sovereign CLI                           │
-├─────────────────────────────────────────────────────────────┤
-│                    Agent Orchestrator                        │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐            │
-│  │ Code Agent  │ │Search Agent │ │ Chat Agent  │            │
-│  └─────────────┘ └─────────────┘ └─────────────┘            │
-├─────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐            │
-│  │  Ollama     │ │  Codebase   │ │   Memory    │            │
-│  │  (LLM)      │ │   Index     │ │   Store     │            │
-│  │             │ │ + Embeddings│ │  + CRDT     │            │
-│  └─────────────┘ └─────────────┘ └─────────────┘            │
-│                         │                │                   │
-│                   ┌─────┴────────────────┴─────┐            │
-│                   │      P2P Sync Service       │            │
-│                   └─────────────────────────────┘            │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                    IDE Extensions                                │
+│  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐        │
+│  │ VS Code Ext   │  │ IntelliJ Plug │  │   Future...   │        │
+│  └───────┬───────┘  └───────┬───────┘  └───────────────┘        │
+│          └──────────────────┼───────────────────────────────────┤
+│                             │                                    │
+│  ┌──────────────────────────▼──────────────────────────────────┐│
+│  │                  Daemon / CLI Interface                      ││
+│  │           (Unix Socket / TCP / Direct CLI)                   ││
+│  └──────────────────────────┬──────────────────────────────────┘│
+├─────────────────────────────┼───────────────────────────────────┤
+│                             │                                    │
+│  ┌──────────────────────────▼──────────────────────────────────┐│
+│  │                  Agent Orchestrator                          ││
+│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐            ││
+│  │  │ Code Agent  │ │Search Agent │ │ Chat Agent  │            ││
+│  │  └─────────────┘ └─────────────┘ └─────────────┘            ││
+│  └──────────────────────────────────────────────────────────────┘│
+├─────────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌────────────┐ │
+│  │   Ollama    │ │  Codebase   │ │   Memory    │ │    RAG     │ │
+│  │ (LLM+Vision)│ │   Index     │ │   Store     │ │  Retrieval │ │
+│  │             │ │ + Embeddings│ │  + CRDT     │ │  (Hybrid)  │ │
+│  └─────────────┘ └─────────────┘ └─────────────┘ └────────────┘ │
+├─────────────────────────────────────────────────────────────────┤
+│  ┌─────────────────────────┐  ┌─────────────────────────┐       │
+│  │     P2P Sync Service    │  │     File Watcher        │       │
+│  │      (TCP Direct)       │  │    (Auto-Reindex)       │       │
+│  └─────────────────────────┘  └─────────────────────────┘       │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ## Local-First Principles
@@ -257,6 +320,7 @@ Files:
 
 Recommended models (via Ollama):
 
+### Code Models
 | Model | Size | Quality | Speed |
 |-------|------|---------|-------|
 | qwen2.5-coder:7b | 4.7GB | Good | Fast |
@@ -264,7 +328,15 @@ Recommended models (via Ollama):
 | qwen2.5-coder:32b | 20GB | Best | Slow |
 | deepseek-coder-v2:16b | 9GB | Excellent | Medium |
 
-For embeddings:
+### Vision Models (Multi-Modal)
+| Model | Size | Description |
+|-------|------|-------------|
+| llava:7b | 4.7GB | Good general vision |
+| llava:13b | 8GB | Better quality |
+| bakllava | 4.7GB | Improved architecture |
+| moondream | 1.8GB | Lightweight, fast |
+
+### Embeddings
 | Model | Size | Description |
 |-------|------|-------------|
 | nomic-embed-text | 274MB | Fast, good quality embeddings |
@@ -274,20 +346,40 @@ Change model:
 sovereign --model qwen2.5-coder:7b
 ```
 
+Pull vision model for multi-modal support:
+```bash
+ollama pull llava:7b
+```
+
 ## Roadmap
 
+### Completed
 - [x] Basic CLI with chat
 - [x] Codebase indexing with FTS
 - [x] Persistent memory
 - [x] Vector embeddings for semantic search
 - [x] CRDT-based memory with Automerge
 - [x] P2P sync
-- [x] VS Code extension (basic)
-- [ ] IntelliJ plugin
+- [x] VS Code extension with streaming
+- [x] IntelliJ plugin (Kotlin)
+- [x] Background daemon mode (Unix socket + TCP)
+- [x] File watching for auto-reindex
+- [x] Multi-modal support (vision models)
+- [x] Hybrid RAG retrieval
+
+### In Progress
 - [ ] Neovim plugin
-- [ ] Background daemon mode
-- [ ] File watching for auto-reindex
-- [ ] Multi-modal support (diagrams, images)
+- [ ] WebSocket support for real-time streaming
+- [ ] Plugin marketplace publishing (VS Code, JetBrains)
+
+### Planned
+- [ ] Emacs plugin
+- [ ] Web UI dashboard
+- [ ] Project-specific memory contexts
+- [ ] Git integration (commit message generation, PR summaries)
+- [ ] Code completion (inline suggestions)
+- [ ] Multi-repo support
+- [ ] Team collaboration features
 
 ## Author
 
